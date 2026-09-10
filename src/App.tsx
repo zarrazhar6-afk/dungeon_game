@@ -40,8 +40,19 @@ export default function App() {
   const [, setTick] = useState<number>(0);
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
 
+  const saveDataRef = useRef<GameSaveData>(saveData);
+  saveDataRef.current = saveData;
+
+  // Track where the Upgrade Shop was opened from so returning always goes to the correct screen
+  const shopReturnStateRef = useRef<GameState>('menu');
+  const openUpgradeShop = (fromState: GameState) => {
+    shopReturnStateRef.current = fromState;
+    setGameState('upgrade_shop');
+  };
+
   // Save data sync
   const updateSaveData = (newData: GameSaveData) => {
+    saveDataRef.current = newData;
     setSaveData(newData);
     saveGameData(newData);
     setHasSave(hasExistingSave());
@@ -64,13 +75,24 @@ export default function App() {
       canvas.height = containerRef.current.clientHeight || window.innerHeight || 600;
     }
 
-    // Create or reuse engine
+    // Always fetch latest authoritative save data from storage
+    const currentSave = loadGameSave();
+    saveDataRef.current = currentSave;
+    setSaveData(currentSave);
+
+    // Keep currently active weapon and element if player already selected one
+    const activeWeapon = engineRef.current?.stats.activeWeapon || 'sword';
+    const activeElement = engineRef.current?.stats.activeElement || 'fire';
+
+    // Create or reuse engine with full upgraded stats
     const engine = new GameEngine(
       canvas,
       floorIndex,
-      saveData.upgrades,
-      saveData.coins,
-      saveData.potions
+      currentSave.upgrades,
+      currentSave.coins,
+      currentSave.potions,
+      activeWeapon,
+      activeElement
     );
 
     engine.onStatsChanged = () => {
@@ -78,12 +100,21 @@ export default function App() {
     };
 
     engine.onLevelComplete = (stats) => {
-      // Save progress across all 30 stages
+      // Re-read latest save data to avoid any stale closure
+      const latestSave = loadGameSave();
       const nextLevel = Math.min(30, floorIndex + 2); // 1-indexed next level
+
       const updatedSave: GameSaveData = {
-        ...saveData,
+        ...latestSave,
+        // Crucial: preserve and keep all purchased upgrades
+        upgrades: {
+          sword: Math.max(latestSave.upgrades?.sword || 1, engine.upgrades?.sword || 1),
+          armor: Math.max(latestSave.upgrades?.armor || 1, engine.upgrades?.armor || 1),
+          health: Math.max(latestSave.upgrades?.health || 1, engine.upgrades?.health || 1),
+          shield: Math.max(latestSave.upgrades?.shield || 1, engine.upgrades?.shield || 1),
+        },
         currentLevel: nextLevel,
-        highestLevelUnlocked: Math.max(saveData.highestLevelUnlocked, nextLevel),
+        highestLevelUnlocked: Math.max(latestSave.highestLevelUnlocked || 1, nextLevel),
         coins: engine.stats.coins,
         potions: engine.stats.potions,
       };
@@ -100,9 +131,17 @@ export default function App() {
     };
 
     engine.onGameOver = (stats) => {
-      // Preserve accumulated coins
+      // Re-read latest save data to avoid stale closure
+      const latestSave = loadGameSave();
       const updatedSave: GameSaveData = {
-        ...saveData,
+        ...latestSave,
+        // Crucial: preserve all purchased upgrades on game over
+        upgrades: {
+          sword: Math.max(latestSave.upgrades?.sword || 1, engine.upgrades?.sword || 1),
+          armor: Math.max(latestSave.upgrades?.armor || 1, engine.upgrades?.armor || 1),
+          health: Math.max(latestSave.upgrades?.health || 1, engine.upgrades?.health || 1),
+          shield: Math.max(latestSave.upgrades?.shield || 1, engine.upgrades?.shield || 1),
+        },
         coins: engine.stats.coins,
       };
       updateSaveData(updatedSave);
@@ -113,14 +152,16 @@ export default function App() {
 
     engine.onVictory = () => {
       // Slayed Lucifer and restored peace to all 3 realms!
+      const latestSave = loadGameSave();
       const updatedSave: GameSaveData = {
-        ...saveData,
+        ...latestSave,
         coins: engine.stats.coins + 2000,
         unlockedDragonSlayer: true,
         gameBeaten: true,
         upgrades: {
-          ...saveData.upgrades,
-          sword: 5, // Unlock Dragon Slayer
+          ...latestSave.upgrades,
+          // Never downgrade sword if already level 6-10
+          sword: Math.max(latestSave.upgrades?.sword || 1, 5),
         },
       };
       updateSaveData(updatedSave);
@@ -295,7 +336,7 @@ export default function App() {
 
                 <button
                   id="btn-pause-shop"
-                  onClick={() => setGameState('upgrade_shop')}
+                  onClick={() => openUpgradeShop('playing')}
                   className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-2 font-pixel text-xs cursor-pointer"
                 >
                   <ShoppingBag className="w-4 h-4 text-amber-400" />
@@ -330,7 +371,7 @@ export default function App() {
           onStartNewGame={() => startLevel(0)}
           onContinueGame={() => startLevel(saveData.currentLevel - 1)}
           onOpenMapSelect={() => setGameState('map_select')}
-          onOpenUpgrade={() => setGameState('upgrade_shop')}
+          onOpenUpgrade={() => openUpgradeShop('menu')}
           onOpenHowToPlay={() => setGameState('how_to_play')}
           onOpenSettings={() => setGameState('settings')}
         />
@@ -361,11 +402,7 @@ export default function App() {
           saveData={saveData}
           onSaveDataChange={updateSaveData}
           onClose={() => {
-            if (engineRef.current && engineRef.current.stats.hp > 0) {
-              setGameState('playing');
-            } else {
-              setGameState('menu');
-            }
+            setGameState(shopReturnStateRef.current);
           }}
         />
       )}
@@ -384,7 +421,7 @@ export default function App() {
               startLevel(nextIdx);
             }
           }}
-          onOpenUpgrade={() => setGameState('upgrade_shop')}
+          onOpenUpgrade={() => openUpgradeShop('level_complete')}
           onMainMenu={() => setGameState('menu')}
         />
       )}
@@ -398,7 +435,7 @@ export default function App() {
             const currentIdx = engine ? engine.currentLevelIndex : 0;
             startLevel(currentIdx);
           }}
-          onOpenUpgrade={() => setGameState('upgrade_shop')}
+          onOpenUpgrade={() => openUpgradeShop('game_over')}
           onMainMenu={() => setGameState('menu')}
         />
       )}

@@ -28,14 +28,22 @@ export function loadGameSave(): GameSaveData {
     return {
       currentLevel: parsed.currentLevel || 1,
       highestLevelUnlocked: parsed.highestLevelUnlocked || 1,
-      coins: typeof parsed.coins === 'number' ? parsed.coins : 0,
+      coins: typeof parsed.coins === 'number' && !isNaN(parsed.coins) ? parsed.coins : 0,
       upgrades: {
-        sword: parsed.upgrades?.sword || 1,
-        armor: parsed.upgrades?.armor || 1,
-        health: parsed.upgrades?.health || 1,
-        shield: parsed.upgrades?.shield || 1,
+        sword: typeof parsed.upgrades?.sword === 'number' && !isNaN(parsed.upgrades.sword)
+          ? Math.max(1, Math.min(10, parsed.upgrades.sword))
+          : 1,
+        armor: typeof parsed.upgrades?.armor === 'number' && !isNaN(parsed.upgrades.armor)
+          ? Math.max(1, Math.min(10, parsed.upgrades.armor))
+          : 1,
+        health: typeof parsed.upgrades?.health === 'number' && !isNaN(parsed.upgrades.health)
+          ? Math.max(1, Math.min(10, parsed.upgrades.health))
+          : 1,
+        shield: typeof parsed.upgrades?.shield === 'number' && !isNaN(parsed.upgrades.shield)
+          ? Math.max(1, Math.min(10, parsed.upgrades.shield))
+          : 1,
       },
-      potions: typeof parsed.potions === 'number' ? parsed.potions : 2,
+      potions: typeof parsed.potions === 'number' && !isNaN(parsed.potions) ? Math.max(0, Math.min(3, parsed.potions)) : 2,
       unlockedDragonSlayer: !!parsed.unlockedDragonSlayer,
       gameBeaten: !!parsed.gameBeaten,
       highScoreEnemies: parsed.highScoreEnemies || 0,

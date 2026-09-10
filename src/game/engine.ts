@@ -105,35 +105,52 @@ export class GameEngine {
   public onVictory?: () => void;
   public onStatsChanged?: () => void;
 
+  private getUpgradeIndex(val: number | undefined): number {
+    const num = typeof val === 'number' && !isNaN(val) ? val : 1;
+    return Math.max(0, Math.min(9, num - 1));
+  }
+
   constructor(
     canvas: HTMLCanvasElement,
     initialLevelIndex: number,
     upgrades: UpgradeLevels,
     coins: number,
-    potions: number
+    potions: number,
+    activeWeapon?: WeaponType,
+    activeElement?: ElementType
   ) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
     this.ctx.imageSmoothingEnabled = false;
 
-    this.upgrades = { ...upgrades };
+    this.upgrades = {
+      sword: Math.max(1, Math.min(10, upgrades?.sword || 1)),
+      armor: Math.max(1, Math.min(10, upgrades?.armor || 1)),
+      health: Math.max(1, Math.min(10, upgrades?.health || 1)),
+      shield: Math.max(1, Math.min(10, upgrades?.shield || 1)),
+    };
     this.currentLevelIndex = initialLevelIndex;
     this.currentLevel = LEVELS[this.currentLevelIndex] || LEVELS[0];
 
-    // Compute stats from upgrades
-    const maxHp = HEALTH_UPGRADES[this.upgrades.health - 1].statBonus;
+    // Compute stats safely from upgrades
+    const healthTier = HEALTH_UPGRADES[this.getUpgradeIndex(this.upgrades.health)] || HEALTH_UPGRADES[0];
+    const swordTier = SWORD_UPGRADES[this.getUpgradeIndex(this.upgrades.sword)] || SWORD_UPGRADES[0];
+    const armorTier = ARMOR_UPGRADES[this.getUpgradeIndex(this.upgrades.armor)] || ARMOR_UPGRADES[0];
+    const shieldTier = SHIELD_UPGRADES[this.getUpgradeIndex(this.upgrades.shield)] || SHIELD_UPGRADES[0];
+
+    const maxHp = healthTier.statBonus;
     this.stats = {
       hp: maxHp,
       maxHp: maxHp,
-      attack: SWORD_UPGRADES[this.upgrades.sword - 1].statBonus,
-      defense: ARMOR_UPGRADES[this.upgrades.armor - 1].statBonus,
+      attack: swordTier.statBonus,
+      defense: armorTier.statBonus,
       speed: 4.2,
-      blockPercent: SHIELD_UPGRADES[this.upgrades.shield - 1].statBonus / 100,
-      coins: coins,
-      potions: Math.min(3, potions),
+      blockPercent: (shieldTier.statBonus || 30) / 100,
+      coins: typeof coins === 'number' && !isNaN(coins) ? coins : 0,
+      potions: Math.min(3, typeof potions === 'number' ? potions : 2),
       maxPotions: 3,
-      activeWeapon: 'sword',
-      activeElement: 'fire',
+      activeWeapon: activeWeapon || 'sword',
+      activeElement: activeElement || 'fire',
       elementSkillCooldown: 0,
       maxSkillCooldown: 3.5,
     };
@@ -142,14 +159,24 @@ export class GameEngine {
   }
 
   public updateUpgrades(upgrades: UpgradeLevels) {
-    this.upgrades = { ...upgrades };
-    const maxHp = HEALTH_UPGRADES[this.upgrades.health - 1].statBonus;
-    const hpRatio = this.stats.hp / this.stats.maxHp;
+    this.upgrades = {
+      sword: Math.max(1, Math.min(10, upgrades?.sword || 1)),
+      armor: Math.max(1, Math.min(10, upgrades?.armor || 1)),
+      health: Math.max(1, Math.min(10, upgrades?.health || 1)),
+      shield: Math.max(1, Math.min(10, upgrades?.shield || 1)),
+    };
+    const healthTier = HEALTH_UPGRADES[this.getUpgradeIndex(this.upgrades.health)] || HEALTH_UPGRADES[0];
+    const swordTier = SWORD_UPGRADES[this.getUpgradeIndex(this.upgrades.sword)] || SWORD_UPGRADES[0];
+    const armorTier = ARMOR_UPGRADES[this.getUpgradeIndex(this.upgrades.armor)] || ARMOR_UPGRADES[0];
+    const shieldTier = SHIELD_UPGRADES[this.getUpgradeIndex(this.upgrades.shield)] || SHIELD_UPGRADES[0];
+
+    const maxHp = healthTier.statBonus;
+    const hpRatio = this.stats.maxHp > 0 ? this.stats.hp / this.stats.maxHp : 1;
     this.stats.maxHp = maxHp;
     this.stats.hp = Math.round(maxHp * Math.max(0.5, hpRatio));
-    this.stats.attack = SWORD_UPGRADES[this.upgrades.sword - 1].statBonus;
-    this.stats.defense = ARMOR_UPGRADES[this.upgrades.armor - 1].statBonus;
-    this.stats.blockPercent = SHIELD_UPGRADES[this.upgrades.shield - 1].statBonus / 100;
+    this.stats.attack = swordTier.statBonus;
+    this.stats.defense = armorTier.statBonus;
+    this.stats.blockPercent = (shieldTier.statBonus || 30) / 100;
     if (this.onStatsChanged) this.onStatsChanged();
   }
 
