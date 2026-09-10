@@ -1,0 +1,6 @@
+{
+  "name": "Pixel Dungeon: The Dragon's Crown",
+  "description": "2D retro pixel art action-adventure dungeon crawler across 3 worlds and 30 stages, battling goblins, wizards, demons, and dark lords to rescue Princess Lyra.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
